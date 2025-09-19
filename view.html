@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ paper.title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .paper-section { margin-bottom: 20px; }
+        .authors { font-style: italic; color: #555; }
+        .abstract, .analysis { line-height: 1.6; }
+        .pdf-viewer { height: 600px; width: 100%; border: 1px solid #dee2e6; margin-bottom: 20px; }
+    </style>
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body class="container mt-5">
+    <h1 class="paper-section">{{ paper.title }}</h1>
+    <p class="authors paper-section"><strong>Authors:</strong> {{ paper.authors | safe }}</p>
+    <div class="abstract paper-section">
+        <h3>Abstract</h3>
+        <pre>{{ paper.abstract | safe }}</pre>  <!-- Pre for whitespace preservation -->
+    </div>
+    <div class="paper-section">
+        <h3>View Full Paper (Original Format)</h3>
+        <div class="pdf-viewer" id="pdfViewer"></div>
+    </div>
+    <div id="analysis" class="analysis paper-section">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+    <a href="/" class="btn btn-secondary mt-3">Upload Another</a>
+    <a href="/search" class="btn btn-secondary mt-3">Search</a>
+    <script>
+        const url = '/uploads/{{ pdf_filename }}';
+        const pdfjsLib = window['pdfjsLib'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const loadingTask = pdfjsLib.getDocument(url);
+        loadingTask.promise.then(pdf => {
+            const container = document.getElementById('pdfViewer');
+            const totalPages = pdf.numPages;
+
+            for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+                pdf.getPage(pageNumber).then(page => {
+                    const scale = 1.5;
+                    const viewport = page.getViewport({ scale: scale });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    container.appendChild(canvas);
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    page.render(renderContext);
+                });
+            }
+        }).catch(error => console.error('Error loading PDF:', error));
+
+        const id = {{ paper.id }};
+        fetch(`/summarize/${id}`).then(r => r.json()).then(data => {
+            document.getElementById('analysis').innerHTML = `
+                <h2>LLM Summary</h2><div class="alert alert-info">${data.summary}</div>
+                <h3>Key Findings</h3><div class="alert alert-success">${data.key_findings}</div>
+            `;
+        }).catch(err => console.error(err));
+        fetch(`/gaps/${id}`).then(r => r.json()).then(data => {
+            document.getElementById('analysis').innerHTML += `
+                <h2>Research Gaps</h2><div class="alert alert-warning">${data.gaps}</div>
+                <h3>Future Work</h3><div class="alert alert-info">${data.future_work}</div>
+            `;
+        }).catch(err => console.error(err));
+    </script>
+</body>
+</html>
